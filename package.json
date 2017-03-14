@@ -1,0 +1,31 @@
+{
+  "name": "aws-elb-apache-log",
+  "version": "1.0.0",
+  "description": "Convert ELB logs in Amazon S3 to Apache log format.",
+  "main": "index.js",
+  "bin": {
+    "aws-elb-apache-log": "index.js"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.28.0",
+    "byline": "^5.0.0",
+    "dateformat": "^2.0.0",
+    "elb-log-parser": "^0.0.3",
+    "multistream": "^2.1.0",
+    "stream": "^0.0.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asannou/node-aws-elb-apache-log.git"
+  },
+  "author": "asannou",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/asannou/node-aws-elb-apache-log/issues"
+  },
+  "homepage": "https://github.com/asannou/node-aws-elb-apache-log#readme"
+}
