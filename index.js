@@ -46,8 +46,16 @@ module.exports = (bucket, prefix) => {
         listObjects({ Bucket: bucket, Prefix: prefix }).
         promise().
         then(data => {
-            const streams = data.Contents.map(object => logStream(bucket, object.Key));
-            return Promise.resolve(MultiStream(streams));
+            const objects = data.Contents;
+            const factory = callback => {
+                const object = objects.shift();
+                if (object) {
+                    callback(null, logStream(bucket, object.Key));
+                } else {
+                    callback(null, null);
+                }
+            };
+            return Promise.resolve(MultiStream(factory));
         });
 
 };
