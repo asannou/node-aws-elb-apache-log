@@ -1,6 +1,6 @@
 FROM node:alpine
 WORKDIR /usr/src/app
 COPY package.json .
-COPY index.js .
 RUN npm install
+COPY index.js .
 ENTRYPOINT ["npm", "start", "-s"]

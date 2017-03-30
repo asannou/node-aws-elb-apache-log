@@ -30,8 +30,18 @@ module.exports = (bucket, prefix) => {
             ];
             return apache.join(' ');
         };
-        return elbLog.
-            createReadStream().
+        const elbLogStream = elbLog.createReadStream();
+        return elbLogStream.
+            on("error", (err) => {
+                const request = [
+                    elbLog.operation,
+                    elbLog.params.Bucket,
+                    elbLog.params.Key
+                ];
+                console.error(err.code + ": " + request.join(" "));
+                elbLogStream.removeAllListeners("error");
+                elbLogStream.emit("end");
+            }).
             pipe(new LineStream()).
             pipe(new stream.Transform({
                 objectMode: true,
