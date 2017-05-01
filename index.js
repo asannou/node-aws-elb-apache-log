@@ -46,7 +46,12 @@ module.exports = (bucket, prefix) => {
             pipe(new stream.Transform({
                 objectMode: true,
                 transform: function(line, encoding, callback) {
-                    this.push(toApacheLog(line) + '\n');
+                    try {
+                        this.push(toApacheLog(line) + '\n');
+                    } catch (e) {
+                        console.error(e);
+                        console.error("skip '" + line + "'");
+                    }
                     callback();
                 }
             }));
