@@ -5,6 +5,7 @@ module.exports = (bucket, prefix) => {
     const AWS = require('aws-sdk');
     const MultiStream = require('multistream');
 
+    const zlib = require('zlib');
     const LineStream = require('byline').LineStream;
     const stream = require('stream');
     const parse = require('elb-log-parser');
@@ -13,7 +14,38 @@ module.exports = (bucket, prefix) => {
     const s3 = new AWS.S3();
 
     const logStream = (bucket, key) => {
-        const elbLog = s3.getObject({ Bucket: bucket, Key: key });
+        const lbLog = s3.getObject({ Bucket: bucket, Key: key });
+        const lbLogStream = lbLog.createReadStream().
+            on("error", (err) => {
+                const request = [
+                    lbLog.operation,
+                    lbLog.params.Bucket,
+                    lbLog.params.Key
+                ];
+                console.error(err.code + ": " + request.join(" "));
+                lbLogStream.removeAllListeners("error");
+                lbLogStream.emit("end");
+            });
+        const fromALBToELB = albLog => albLog.
+            pipe(zlib.createGunzip()).
+            pipe(new LineStream()).
+            pipe(new stream.Transform({
+                objectMode: true,
+                transform: function(line, encoding, callback) {
+                    const alb = line.toString().split(" ");
+                    const type = alb[0];
+                    if (type == "http" || type == "https" || type == "h2") {
+                        alb.shift();
+                        this.push(alb.join(" ") + '\n');
+                    } else {
+                        console.error("skip '" + line + "'");
+                    }
+                    callback();
+                }
+            }));
+        const elbLogStream = key.endsWith(".gz") ?
+            fromALBToELB(lbLogStream) :
+            lbLogStream.pipe(new LineStream());
         const toApacheLog = line => {
             const elb = parse(line.toString());
             const path = elb.request_uri_query ?
@@ -30,19 +62,7 @@ module.exports = (bucket, prefix) => {
             ];
             return apache.join(' ');
         };
-        const elbLogStream = elbLog.createReadStream();
         return elbLogStream.
-            on("error", (err) => {
-                const request = [
-                    elbLog.operation,
-                    elbLog.params.Bucket,
-                    elbLog.params.Key
-                ];
-                console.error(err.code + ": " + request.join(" "));
-                elbLogStream.removeAllListeners("error");
-                elbLogStream.emit("end");
-            }).
-            pipe(new LineStream()).
             pipe(new stream.Transform({
                 objectMode: true,
                 transform: function(line, encoding, callback) {
