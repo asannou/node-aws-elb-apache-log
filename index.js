@@ -26,7 +26,7 @@ module.exports = (bucket, prefix) => {
                 lbLogStream.removeAllListeners("error");
                 lbLogStream.emit("end");
             });
-        const fromALBToELB = albLog => albLog.
+        const fromALBToELB = (albLog) => albLog.
             pipe(zlib.createGunzip()).
             pipe(new LineStream()).
             pipe(new stream.Transform({
@@ -46,17 +46,28 @@ module.exports = (bucket, prefix) => {
         const elbLogStream = key.endsWith(".gz") ?
             fromALBToELB(lbLogStream) :
             lbLogStream.pipe(new LineStream());
-        const toApacheLog = line => {
+        const request = process.env.AWS_ELB_APACHE_LOG_ORIGIN ?
+            (elb) => elb.request :
+            (elb) => {
+                const path = elb.request_uri_query ?
+                    elb.request_uri_path + '?' + elb.request_uri_query :
+                    elb.request_uri_path;
+                return [
+                    elb.request_method,
+                    path,
+                    elb.request_http_version
+                ].join(' ');
+            };
+        const date = (elb) =>
+            dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss +0000');
+        const toApacheLog = (line) => {
             const elb = parse(line.toString());
-            const path = elb.request_uri_query ?
-                elb.request_uri_path + '?' + elb.request_uri_query :
-                elb.request_uri_path;
             const apache = [
                 elb.client,
                 '-',
                 '-',
-                '[' + dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss +0000') + ']',
-                '"' + [elb.request_method, path, elb.request_http_version].join(' ') + '"',
+                '[' + date(elb) + ']',
+                '"' + request(elb) + '"',
                 elb.backend_status_code,
                 elb.sent_bytes
             ];
@@ -80,9 +91,9 @@ module.exports = (bucket, prefix) => {
     return s3.
         listObjects({ Bucket: bucket, Prefix: prefix }).
         promise().
-        then(data => {
+        then((data) => {
             const objects = data.Contents;
-            const factory = callback => {
+            const factory = (callback) => {
                 const object = objects.shift();
                 if (object) {
                     callback(null, logStream(bucket, object.Key));
@@ -98,6 +109,7 @@ module.exports = (bucket, prefix) => {
 if (require.main === module) {
     const bucket = process.argv[2];
     const prefix = process.argv[3];
-    module.exports(bucket, prefix).then(stream => stream.pipe(process.stdout));
+    module.exports(bucket, prefix).
+        then((stream) => stream.pipe(process.stdout));
 }
 
