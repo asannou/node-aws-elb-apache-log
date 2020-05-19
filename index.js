@@ -59,7 +59,7 @@ module.exports = (bucket, prefix) => {
                 ].join(' ');
             };
         const date = (elb) =>
-            dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss +0000');
+            dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss o');
         const toApacheLog = (line) => {
             const elb = parse(line.toString());
             const apache = [
