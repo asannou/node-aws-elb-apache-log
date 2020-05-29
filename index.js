@@ -101,7 +101,7 @@ module.exports = (bucket, prefix) => {
                     callback(null, null);
                 }
             };
-            return Promise.resolve(MultiStream(factory));
+            return Promise.resolve(new MultiStream(factory));
         });
 
 };
