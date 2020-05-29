@@ -89,13 +89,13 @@ module.exports = (bucket, prefix) => {
     };
 
     return s3.
-        listObjects({ Bucket: bucket, Prefix: prefix }).
+        listObjectsV2({ Bucket: bucket, Prefix: prefix }).
         promise().
         then((data) => {
             const objects = data.Contents;
             const factory = (callback) => {
                 const object = objects.shift();
-                if (object) {
+                if (object && object.Size) {
                     callback(null, logStream(bucket, object.Key));
                 } else {
                     callback(null, null);
