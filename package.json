@@ -9,6 +9,7 @@
   "dependencies": {
     "aws-sdk": "^2.686.0",
     "byline": "^5.0.0",
+    "cloudfront-log-parser": "^1.2.0",
     "dateformat": "^3.0.3",
     "elb-log-parser": "^0.0.3",
     "multistream": "^4.0.0",
