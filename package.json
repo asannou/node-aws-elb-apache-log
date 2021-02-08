@@ -1,7 +1,7 @@
 {
   "name": "aws-elb-apache-log",
   "version": "1.0.0",
-  "description": "Convert ELB logs in Amazon S3 to Apache log format.",
+  "description": "Convert ELB/CloudFront logs in Amazon S3 to Apache log format.",
   "main": "index.js",
   "bin": {
     "aws-elb-apache-log": "index.js"
@@ -9,7 +9,6 @@
   "dependencies": {
     "aws-sdk": "^2.686.0",
     "byline": "^5.0.0",
-    "cloudfront-log-parser": "^1.2.0",
     "dateformat": "^3.0.3",
     "elb-log-parser": "^0.0.3",
     "multistream": "^4.0.0",

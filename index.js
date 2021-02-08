@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-module.exports = (bucket, prefix, dateTime = null) => {
+module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
 
     const AWS = require('aws-sdk');
     const MultiStream = require('multistream');
@@ -9,7 +9,6 @@ module.exports = (bucket, prefix, dateTime = null) => {
     const { LineStream } = require('byline');
     const { Transform, PassThrough } = require('stream');
     const elbParser = require('elb-log-parser');
-    const CloudFrontParser = require('cloudfront-log-parser');
     const dateFormat = require('dateformat');
 
     const s3 = new AWS.S3();
@@ -24,21 +23,28 @@ module.exports = (bucket, prefix, dateTime = null) => {
                 lbLog.params.Bucket,
                 lbLog.params.Key
             ];
-            console.error(err.code + ": " + request.join(" "));
+            console.error(`${err.code}: ${request.join(" ")}`);
             lbLogStream.removeAllListeners("error");
             lbLogStream.emit("end");
+        });
+
+        const toString = new Transform({
+            objectMode: true,
+            transform: function(line, encoding, callback) {
+                this.push(line.toString());
+                callback();
+            }
         });
 
         const fromALBToELB = new Transform({
             objectMode: true,
             transform: function(line, encoding, callback) {
-                const alb = line.toString().split(" ");
-                const type = alb[0];
+                const alb = line.split(" ");
+                const type = alb.shift();
                 if (type == "http" || type == "https" || type == "h2") {
-                    alb.shift();
-                    this.push(alb.join(" ") + '\n');
+                    this.push(`${alb.join(" ")}\n`);
                 } else {
-                    console.error("skip '" + line + "'");
+                    console.error(`skip '${line}'`);
                 }
                 callback();
             }
@@ -48,45 +54,60 @@ module.exports = (bucket, prefix, dateTime = null) => {
             objectMode: true,
             transform: function(line, encoding, callback) {
                 try {
-                    this.push(elbParser(line.toString()));
+                    this.push(elbParser(line));
                 } catch (e) {
                     console.error(e);
-                    console.error("skip '" + line + "'");
+                    console.error(`skip '${line}'`);
                 }
                 callback();
             }
         });
 
-        const parseCloudFront = new Transform({
-            objectMode: true,
-            transform: function(line, encoding, callback) {
-                try {
-                    const logs = CloudFrontParser.parse(line, { format: 'web' });
-                    const log = logs.shift();
-                    this.push({
-                        client: log["c-ip"],
-                        timestamp: log.date + "T" + log.time + "Z",
-                        request_uri_query: log["cs-uri-query"] == "-" ?
-                            "" : log["cs-uri-query"],
-                        request_uri_path: log["cs-uri-stem"],
-                        request_method: log["cs-method"],
-                        request_http_version: log["cs-protocol-version"],
-                        backend_status_code: log["sc-status"],
-                        sent_bytes: log["sc-bytes"],
-                    });
-                } catch (e) {
-                    console.error(e);
-                    console.error("skip '" + line + "'");
+        const parseCloudFront = () => {
+            let fields = [];
+            return new Transform({
+                objectMode: true,
+                transform: function(line, encoding, callback) {
+                    try {
+                        if (line.startsWith('#')) {
+                            const directive = line.substring(1);
+                            const [name, values] = directive.split(/:\s*/);
+                            if (name == 'Fields') {
+                                fields = values.split(/\s+/);
+                            }
+                            return callback();
+                        }
+                        const log = {};
+                        const entries = line.split(/\s+/);
+                        for (let i = 0; i < fields.length; i++) {
+                            log[fields[i]] = entries[i] == '-' ?
+                                '' :
+                                decodeURIComponent(entries[i]);
+                        }
+                        this.push({
+                            client: log["c-ip"],
+                            timestamp: `${log.date}T${log.time}Z`,
+                            request_uri_query: log["cs-uri-query"],
+                            request_uri_path: log["cs-uri-stem"],
+                            request_method: log["cs-method"],
+                            request_http_version: log["cs-protocol-version"],
+                            backend_status_code: log["sc-status"],
+                            sent_bytes: log["sc-bytes"],
+                        });
+                    } catch (e) {
+                        console.error(e);
+                        console.error(`skip '${line}'`);
+                    }
+                    callback();
                 }
-                callback();
-            }
-        });
+            });
+        };
 
         const request = process.env.AWS_ELB_APACHE_LOG_ORIGIN ?
             (elb) => elb.request :
             (elb) => {
                 const path = elb.request_uri_query ?
-                    elb.request_uri_path + '?' + elb.request_uri_query :
+                    `${elb.request_uri_path}?${elb.request_uri_query}` :
                     elb.request_uri_path;
                 return [
                     elb.request_method,
@@ -95,22 +116,20 @@ module.exports = (bucket, prefix, dateTime = null) => {
                 ].join(' ');
             };
 
-        const date = (elb) =>
-            dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss o');
-
         const toApacheLog = new Transform({
             objectMode: true,
             transform: function(elb, encoding, callback) {
+                const date = dateFormat(elb.timestamp, 'dd/mmm/yyyy:HH:MM:ss o');
                 const apache = [
                     elb.client,
                     '-',
                     '-',
-                    '[' + date(elb) + ']',
-                    '"' + request(elb) + '"',
+                    `[${date}]`,
+                    `"${request(elb)}"`,
                     elb.backend_status_code,
                     elb.sent_bytes
                 ];
-                this.push(apache.join(' ') + '\n');
+                this.push(`${apache.join(' ')}\n`);
                 callback();
             }
         });
@@ -124,8 +143,9 @@ module.exports = (bucket, prefix, dateTime = null) => {
         return lbLogStream.
             pipe(isZipped ? zlib.createGunzip() : new PassThrough()).
             pipe(new LineStream()).
-            pipe(isALB ? fromALBToELB : new PassThrough()).
-            pipe(isELB ? parseELB : parseCloudFront).
+            pipe(toString).
+            pipe(isALB ? fromALBToELB : new PassThrough({ objectMode: true })).
+            pipe(isELB ? parseELB : parseCloudFront()).
             pipe(toApacheLog);
 
     };
@@ -144,16 +164,16 @@ module.exports = (bucket, prefix, dateTime = null) => {
                 callback(null, null);
             }
         };
-        return Promise.resolve(new MultiStream(factory));
+        return new MultiStream(factory);
     };
 
-    if (dateTime) {
-        const prevTime = new Date(dateTime);
+    if (cloudFrontDateTime) {
+        const dateTime = new Date(cloudFrontDateTime);
+        const prevTime = new Date(cloudFrontDateTime);
         prevTime.setHours(prevTime.getHours() - 1);
-        dateTime = new Date(dateTime);
         const promises = [prevTime, dateTime].map((dateTime) => {
             const dateHour = dateFormat(dateTime, 'UTC:yyyy-mm-dd-HH');
-            return listObjects(bucket, prefix + dateHour + ".");
+            return listObjects(bucket, `${prefix}${dateHour}.`);
         });
         const filter = (data) => {
             const objects = [];
@@ -181,8 +201,7 @@ module.exports = (bucket, prefix, dateTime = null) => {
 };
 
 if (require.main === module) {
-    const [, , bucket, prefix, dateTime] = process.argv;
-    module.exports(bucket, prefix, dateTime).
+    module.exports(...process.argv.slice(2)).
         then((stream) => stream.pipe(process.stdout));
 }
 
