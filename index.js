@@ -155,7 +155,6 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
         promise();
 
     const createMultiStream = (objects) => {
-        console.error(objects);
         const factory = (callback) => {
             const object = objects.shift();
             if (object && object.Size) {
