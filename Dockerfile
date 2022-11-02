@@ -1,4 +1,4 @@
-FROM asannou/library-node:alpine
+FROM node:16-alpine
 WORKDIR /usr/src/app
 COPY package.json .
 RUN npm install
