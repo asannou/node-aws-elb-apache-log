@@ -2,7 +2,12 @@
 
 module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
 
-    const AWS = require('aws-sdk');
+    const {
+        S3Client,
+        GetObjectCommand,
+        ListObjectsV2Command,
+    } = require("@aws-sdk/client-s3");
+
     const MultiStream = require('multistream');
 
     const zlib = require('zlib');
@@ -11,19 +16,19 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
     const elbParser = require('elb-log-parser');
     const dateFormat = require('dateformat');
 
-    const s3 = new AWS.S3();
+    const client = new S3Client();
 
-    const logStream = (bucket, key) => {
+    const logStream = async (bucket, key) => {
 
-        const lbLog = s3.getObject({ Bucket: bucket, Key: key });
-        const lbLogStream = lbLog.createReadStream();
+        const getObject = async (bucket, key) => {
+            const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+            const response = await client.send(command);
+            return response.Body;
+        };
+
+        const lbLogStream = await getObject(bucket, key);
         lbLogStream.on("error", (err) => {
-            const request = [
-                lbLog.operation,
-                lbLog.params.Bucket,
-                lbLog.params.Key
-            ];
-            console.error(`${err.code}: ${request.join(" ")}`);
+            console.error(err);
             lbLogStream.removeAllListeners("error");
             lbLogStream.emit("end");
         });
@@ -150,15 +155,17 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
 
     };
 
-    const listObjects = (bucket, prefix) => s3.
-        listObjectsV2({ Bucket: bucket, Prefix: prefix }).
-        promise();
+    const listObjects = (bucket, prefix) => {
+        const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix });
+        return client.send(command);
+    };
 
     const createMultiStream = (objects) => {
         const factory = (callback) => {
             const object = objects.shift();
             if (object && object.Size) {
-                callback(null, logStream(bucket, object.Key));
+                logStream(bucket, object.Key).
+                    then((stream) => callback(null, stream));
             } else {
                 callback(null, null);
             }
