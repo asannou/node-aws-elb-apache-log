@@ -160,7 +160,7 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
         return client.send(command);
     };
 
-    const createMultiStream = (objects) => {
+    const createMultiStream = (objects = []) => {
         const factory = (callback) => {
             const object = objects.shift();
             if (object && object.Size) {
