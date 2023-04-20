@@ -155,9 +155,10 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
 
     };
 
-    const listObjects = (bucket, prefix) => {
+    const listObjects = async (bucket, prefix) => {
         const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix });
-        return client.send(command);
+        const response = await client.send(command);
+        return response.Contents || [];
     };
 
     const createMultiStream = (objects) => {
@@ -184,7 +185,7 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
         const filter = (data) => {
             const objects = [];
             for (const datum of data) {
-                for (const object of datum.Contents) {
+                for (const object of datum) {
                     const modified = new Date(object.LastModified);
                     const elapsed = dateTime - modified;
                     const period = 5 * 60 * 1000;
@@ -200,7 +201,6 @@ module.exports = (bucket, prefix, cloudFrontDateTime = null) => {
             then(createMultiStream);
     } else {
         return listObjects(bucket, prefix).
-            then((data) => data.Contents).
             then(createMultiStream);
     }
 
