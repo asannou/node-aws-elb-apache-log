@@ -1,4 +1,4 @@
-FROM node:18-alpine@sha256:93d56eb78836f8faaf1cdc14b5bc1127fb54fd2a1c6c2790aafbef8d45528ae9
+FROM node:18-alpine@sha256:a24108da7089c2d293ceaa61fb8969ec10821e8efe25572e5abb10b1841eb70b
 WORKDIR /usr/src/app
 COPY package.json .
 RUN npm install
