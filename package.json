@@ -9,7 +9,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.315.0",
     "byline": "^5.0.0",
-    "dateformat": "^3.0.3",
+    "dateformat": "^5.0.3",
     "elb-log-parser": "^0.0.3",
     "multistream": "^4.0.0",
     "stream": "^0.0.2"
